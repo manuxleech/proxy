@@ -9,6 +9,21 @@ const PAGE = `<!doctype html><meta name=viewport content="width=device-width,ini
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    // TEMPORARY: debug route (remove after testing)
+    if (path === "/debug") {
+      const r = await fetch(
+        `https://raw.githubusercontent.com/${env.GH_USER}/${env.GH_REPO}/${env.GH_BRANCH}/tt/master.m3u8`,
+        { headers: { Authorization: `token ${env.GH_TOKEN}`, "User-Agent": "cf-worker-proxy" } }
+      );
+      return new Response(
+        `github status: ${r.status}\nuser: ${env.GH_USER}\nrepo: ${env.GH_REPO}\nbranch: ${env.GH_BRANCH}\ntoken set: ${!!env.GH_TOKEN}`,
+        { headers: { "Content-Type": "text/plain" } }
+      );
+    }
+
     if (!["GET", "HEAD"].includes(request.method)) {
       return new Response("Method not allowed", { status: 405 });
     }
@@ -27,7 +42,6 @@ export default {
       });
     }
 
-    const path = new URL(request.url).pathname;
     if (path === "/" || path.includes("..")) {
       return new Response("Not found", { status: 404 });
     }
@@ -38,11 +52,11 @@ export default {
       headers: { Authorization: `token ${env.GH_TOKEN}`, "User-Agent": "cf-worker-proxy" },
       cf: {
         cacheEverything: true,
-        cacheTtlByStatus: { "200-299": 86400, "404": 60, "500-599": 0 },
+        cacheTtlByStatus: { "200-299": 86400, "404": 0, "500-599": 0 },
       },
     });
 
-    if (!gh.ok) return new Response("Not found", { status: gh.status });
+    if (!gh.ok) return new Response(`Upstream error ${gh.status}`, { status: gh.status });
 
     const type = path.endsWith(".m3u8") ? "application/vnd.apple.mpegurl"
       : path.endsWith(".ts") ? "video/mp2t"
